@@ -1,0 +1,76 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+ENV['VAGRANT_NO_PARALLEL'] = 'yes'
+
+domain = 'adelwin.com'
+nodes  = [
+# K8s master
+  {
+    :hostname  => 'master',
+    :box       => 'centos/7',
+    :ip        => '172.42.42.11',
+    :cpu       => '2',
+    :memory    => '2048',
+    :count     => 1,
+    :provision => 'bootstrap_master.sh'
+  },
+# K8s nodes
+  {
+    :hostname  => 'slave',
+    :box       => 'centos/7',
+    :ip        => '172.42.42.12',
+    :cpu       => '1',
+    :memory    => '4096',
+    :count     => 3,
+    :provision => 'bootstrap_nodes.sh'
+  },
+# NFS Server
+  {
+    :hostname  => 'nfs',
+    :box       => 'centos/7',
+    :ip        => '172.42.42.13',
+    :cpu       => '1',
+    :memory    => '2048',
+    :count     => 1,
+    :provision => 'bootstrap_nfs.sh'
+  }
+]
+
+Vagrant.configure(2) do |config|
+
+  # Configure hostmanager plugin
+  config.hostmanager.enabled = true
+  # config.hostmanager.manage_host = true
+  config.hostmanager.manage_guest = true
+  config.hostmanager.ignore_private_ip = false
+  config.hostmanager.include_offline = false
+
+  # Configure base provisioning shell
+  config.vm.provision "shell", path: "bootstrap.sh"
+
+  # Iterate each specified nodes
+  nodes.each do |node|
+    (1..node[:count]).each do |i|
+      config.vm.define "#{node[:hostname]}-#{i}" do |nodeconfig|
+        nodeconfig.vm.box = node[:box]
+
+        # Network
+        nodeconfig.vm.hostname = "#{node[:hostname]}-#{i}"
+        nodeconfig.vm.network :private_network, ip: "#{node[:ip]}#{i}"
+
+        # Resource
+        nodeconfig.vm.provider :virtualbox do |vb|
+          vb.name   = "#{node[:hostname]}-#{i}"
+          vb.cpus   = node[:cpu]
+          vb.memory = node[:memory]
+          vb.name   = "#{node[:hostname]}-#{i}"
+          vb.customize ["modifyvm", :id, "--audio", "none"]
+        end
+
+        # Provisioning Script
+        nodeconfig.vm.provision "shell", path: node[:provision]
+      end
+    end
+  end
+end
